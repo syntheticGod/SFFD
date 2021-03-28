@@ -1,0 +1,122 @@
+#version 460
+#pragma STDGL invariant(all)
+
+layout(location = 0) highp in vec3 position_pragma;//三维度的参数坐标
+layout(location = 1) in vec2 textCoord;
+layout(location = 2) in vec3 normal;
+
+
+out vec3 FragPos;
+out vec2 TextCoord;
+out vec3 FragNormal;
+
+uniform mat4 projection;
+uniform mat4 view;
+uniform mat4 model;
+
+uniform int degree[3];//对应维度xyz次数
+uniform int controlPonitNums[3];
+
+uniform float controlPoints[375];//5*5*5*3,最后三个即vec3
+
+/*
+ layout (std140) uniform CPS{
+    float controlPoints[3000];
+};
+*/
+
+uniform float base_x[60];//5*2*6,即i,seg,多项式的六位
+uniform float base_y[60];
+uniform float base_z[60];
+uniform float controlPoints_localCordinate_singleDimention[6];//3*2，三个维度的参数定义域的下界、上界
+
+
+int calSeg(int dimention, in float t) {
+	float range = controlPoints_localCordinate_singleDimention[dimention * 2 + 1] - controlPoints_localCordinate_singleDimention[dimention * 2];
+	float space = range / (controlPonitNums[dimention] - degree[dimention]);
+	//return int(t/space+degree[dimention]);
+	int result=int((t - controlPoints_localCordinate_singleDimention[dimention * 2]) / space);
+	if(result>1)
+	     result=1;
+	return result;	
+}
+
+
+float calBase_X(int point_index, float t) {//二者均0基
+	int seg = calSeg(0, t);
+	int offset = point_index * 12 + seg * 6;
+	float result = 0;
+	for (int i = 0; i <= degree[0]; i++) {
+		float temp = base_x[i + offset];
+		float pow_temp=1;
+		if(i!=0){
+		   for (int k = 1; k <= i; k++){
+		       pow_temp=pow_temp*t;
+		   }
+		}
+		result = result + temp * pow_temp;
+	}
+
+	return result;
+}
+float calBase_Y(int point_index, float t) {//二者均0基
+	int seg = calSeg(1, t);
+	int offset = point_index * 12 + seg * 6;
+	float result = 0;
+	for (int i = 0; i <= degree[1]; i++) {
+		float temp = base_y[i + offset];
+		float pow_temp=1;
+		if(i!=0){
+		   for (int k = 1; k <= i; k++){
+		       pow_temp=pow_temp*t;
+		   }
+		}
+		result = result + temp * pow_temp;
+	}		
+
+	return result;
+}
+float calBase_Z(int point_index, float t) {//二者均0基
+	int seg = calSeg(2, t);
+	int offset = point_index * 12 + seg * 6;
+	float result = 0;
+	for (int i = 0; i <= degree[2]; i++) {
+		float temp = base_z[i + offset];
+		float pow_temp=1;
+		if(i!=0){
+		   for (int k = 1; k <= i; k++){
+		       pow_temp=pow_temp*t;
+		   }
+		}
+		result = result + temp * pow_temp;
+	}		
+
+	return result;
+}
+void main()
+{
+    
+    highp vec3 position=vec3(0.0f,0.0f,0.0f);
+	float total=0;
+	for(int i=0;i<controlPonitNums[0];i++){
+	    for(int j=0;j<controlPonitNums[1];j++){
+		      for(int k=0;k<controlPonitNums[2];k++){
+			      int offset=i*75+j*15+k*3;
+				  vec3 controlPonit=vec3(controlPoints[offset],controlPoints[offset+1],controlPoints[offset+2]);
+				  float tempx=calBase_X(i,position_pragma.x);
+				  float tempy=calBase_Y(j,position_pragma.y);
+				  float tempz=calBase_Z(k,position_pragma.z);
+				  float temptotal=tempx*tempy*tempz;
+			      position=position+controlPonit*temptotal;
+				  total+=temptotal;
+		   }		
+		}
+	}
+
+	gl_Position = projection * view * model * vec4(position, 1.0);
+	FragPos = vec3(model * vec4(position, 1.0)); // 在世界坐标系中指定片元位置
+	TextCoord = textCoord;
+	mat3 normalMatrix = mat3(transpose(inverse(model)));
+	FragNormal = normalMatrix * normal; // 计算法向量经过模型变换后值
+}
+

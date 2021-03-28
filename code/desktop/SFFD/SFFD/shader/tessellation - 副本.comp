@@ -1,0 +1,129 @@
+#version 460
+
+layout(local_size_x = 1) in;
+
+
+uniform int triangle_nums;//一共需要计算多少三角形
+uniform int tessellationPointNums;//细分点总数
+uniform int tessellationTriangleNums;//细分三角形总数=段数*段数
+uniform int tessellationTimes;//每条边细分段数，一般为5
+struct Vertex {
+vec3 position;
+vec4 tex_cord;
+vec3 normal;
+} ;
+struct CC {
+	float u, v, w;
+};
+
+
+
+layout(binding = 5,std430) readonly buffer VertexAfterDeformation_Buffer{
+	Vertex data[];
+}vertexAfterDeformation_Buffer;//变形后的原始三点，紧密排放三个一组，用作计算纹理坐标/法向
+
+layout(binding = 11,std430) readonly buffer PrecomputeMat{//细分预计算矩阵
+	float data[];
+}precomputeMat;
+
+layout(binding = 7,std430) readonly buffer TriangleControlPoints{//目前仅保存几何位置
+	vec3 data[];
+}triangleControlPoints;
+
+layout(binding = 9,std430) writeonly buffer OutputBuffer_Vertex{//细分后结果，紧密排列
+	Vertex data[];
+}outputBuffer_Vertex;
+
+layout(binding = 10,std430) writeonly buffer OutputBuffer_Indices{//细分后结果，紧密排列
+	uint data[];
+}outputBuffer_Indices;
+
+
+Vertex origin_vertex[3];
+vec3 controlPoints_pos[10];
+
+
+void main()
+{
+        uint workGroupId=gl_WorkGroupID.x*gl_NumWorkGroups.y*gl_NumWorkGroups.z+gl_WorkGroupID.y*gl_NumWorkGroups.z+gl_WorkGroupID.z;		
+		if(workGroupId<triangle_nums){
+		uint baseOffset=workGroupId*tessellationPointNums;
+
+        for(int i=0;i<3;i++)
+		     origin_vertex[i]=vertexAfterDeformation_Buffer.data[workGroupId*3+i];
+	    for(int i=0;i<10;i++)
+		     controlPoints_pos[i]=triangleControlPoints.data[workGroupId*10+i];
+		//for(int i=0;i<tessellationPointNums;i++)
+		     //outputBuffer_Vertex.data[baseOffset+i]=Vertex(vec3(1.0, 1.0, 1.0),vec4(1.0, 1.0,1.0, 1.0),vec3(1.0, 1.0, 1.0));
+
+		
+	   //开始矩阵与向量组的乘法，计算几何位置
+	   for (int i = 0; i < tessellationPointNums; i++){
+	     int base=i*10;
+		 float temptotalX=0;
+		 float temptotalY=0;
+		 float temptotalZ=0;
+	     for(int j=0;j<10;j++){	        
+				temptotalX+=precomputeMat.data[base+j]*controlPoints_pos[j].x;
+				temptotalY+=precomputeMat.data[base+j]*controlPoints_pos[j].y;
+				temptotalZ+=precomputeMat.data[base+j]*controlPoints_pos[j].z;
+		  }
+		  outputBuffer_Vertex.data[baseOffset+i].position=vec3(temptotalX,temptotalY,temptotalZ);
+	   }//矩阵与向量组的乘法完毕
+
+	    CC cps[21];//目前最大支持到细分到5段
+	   //计算细分点的质心坐标
+	    int index = 0;
+	    for (int i = 1; i <= tessellationTimes + 1; i++) {
+		    float rest = 1.0f / tessellationTimes*(i - 1);
+		    CC beginPoint = CC(1 - rest, rest, 0);
+		    cps[index]=beginPoint;
+		    index++;
+		    float space = (i == 1 ? 0 : rest / (i - 1));
+		    for (int k = 1; k < i; k++) {
+			       CC tempPoint = CC(1 - rest, rest - space*k, space*k);
+			       cps[index]=tempPoint;
+				   index++;
+		       }
+	     }
+
+	   //计算纹理坐标与法向，目前用质心坐标算
+	   for (int i = 0; i < tessellationPointNums; i++){
+	         outputBuffer_Vertex.data[baseOffset+i].tex_cord=origin_vertex[0].tex_cord*cps[i].u+origin_vertex[1].tex_cord*cps[i].v+origin_vertex[2].tex_cord*cps[i].w;
+			 outputBuffer_Vertex.data[baseOffset+i].normal=origin_vertex[0].normal*cps[i].u+origin_vertex[1].normal*cps[i].v+origin_vertex[2].normal*cps[i].w;
+	   }
+        
+
+		/*
+		//计算连接索引
+		//先计算顶角朝上的部分
+		baseOffset=workGroupId*tessellationPointNums;
+		uint point_index=0;//起始点在本地的索引
+		uint temp_index=0;
+		for (int i = 1; i <=tessellationTimes; i++){
+            for (int j = 0; j < i; j++){
+			    outputBuffer_Indices.data[baseOffset+temp_index]=baseOffset+point_index;
+				outputBuffer_Indices.data[baseOffset+temp_index+1]=baseOffset+point_index+i;
+				outputBuffer_Indices.data[baseOffset+temp_index+2]=baseOffset+point_index+i+1;
+				point_index++;
+				temp_index+=3;
+			}
+		}
+
+		//再计算顶角朝下的部分
+		uint additionOffset=(1+tessellationTimes)*tessellationTimes/2*3;
+		point_index=1;//起始点在本地的索引
+		temp_index=0;
+		for (int i = 2; i <=tessellationTimes; i++){
+            for (int j = 1; j < i; j++){
+			    outputBuffer_Indices.data[baseOffset+additionOffset+temp_index]=baseOffset+point_index;
+				outputBuffer_Indices.data[baseOffset+additionOffset+temp_index+1]=baseOffset+point_index+i+1;
+				outputBuffer_Indices.data[baseOffset+additionOffset+temp_index+2]=baseOffset+point_index+1;
+				point_index++;
+				temp_index+=3;
+			}
+			point_index+=1;
+		}
+		*/
+	}//如果需要计算
+}//main结束

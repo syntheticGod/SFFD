@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Encoding">
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/model/cutScheme.cpp" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/model/cutScheme.h" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/model/mesh.h" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/model/model.h" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/model/shader.h" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/sample/BsplineBase.h" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/sample/SFFD.h" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/sample/boundbox.cpp" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/sample/boundbox.h" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/sample/bspinebody.cpp" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/sample/bspinebody.h" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/sample/mouse.h" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/util/LogUtil.h" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/app/src/main/cpp/util/ssbo.h" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/build.gradle" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/gradle" charset="GBK" />
+  </component>
+</project>

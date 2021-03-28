@@ -1,0 +1,102 @@
+#version 460
+
+layout(local_size_x = 1) in;
+
+
+//uniform int degree[3];//对应维度xyz次数
+uniform int vertex_nums;//原始点总数（三角形数*3）
+
+struct Vertex {
+vec3 position;
+vec4 tex_cord;
+vec3 normal;
+} ;
+struct CC {
+	float u, v, w;
+};
+
+
+layout(binding = 0,std430) readonly buffer VertexBuffer{
+	Vertex data[];
+}vertexbuffer;
+
+layout(binding = 1,std430) readonly buffer IndicesBuffer{
+	int data[];
+}indicesBuffer;
+
+layout(binding = 2,std430) writeonly buffer Outputbuffer{
+	Vertex data[];
+}outputbuffer;//输出重心插值后约束拟合点（64个为一组）
+
+layout(binding = 10,std430) writeonly buffer Outputbuffer_texCord{
+	vec2 data[];
+}outputbuffer_texCord;//输出原始三角形三点的纹理坐标（3个为一组）
+
+layout(binding = 14,std430) writeonly buffer Outputbuffer_normal{
+	vec4 data[];
+}outputbuffer_normal;//输出重心插值后各点的法向坐标（64个为一组）
+
+Vertex origin_vertex[3];
+
+Vertex calVertex_CP(CC cp){//参数为质心坐标
+   Vertex resultVertex=Vertex(origin_vertex[0].position*cp.u+origin_vertex[1].position*cp.v+origin_vertex[2].position*cp.w,
+                              origin_vertex[0].tex_cord*cp.u+origin_vertex[1].tex_cord*cp.v+origin_vertex[2].tex_cord*cp.w,
+							  origin_vertex[0].normal*cp.u+origin_vertex[1].normal*cp.v+origin_vertex[2].normal*cp.w);         
+		return resultVertex;
+}
+void main()
+{
+        uint workGroupId=gl_WorkGroupID.x*gl_NumWorkGroups.y*gl_NumWorkGroups.z+gl_WorkGroupID.y*gl_NumWorkGroups.z+gl_WorkGroupID.z;		
+	    uint work_id=workGroupId*3;
+		if(work_id<vertex_nums){//开始计算工作
+
+        for(int i=0;i<3;i++){
+		origin_vertex[i]=vertexbuffer.data[indicesBuffer.data[work_id+i]];
+		outputbuffer_texCord.data[work_id+i]=vec2(origin_vertex[i].tex_cord.x,origin_vertex[i].tex_cord.y);
+		}	
+
+	   //int totalD=degree[0]+degree[1]+degree[2];
+	   //const int fittingPointNums=(1+totalD)*(2+totalD)/2;
+	   int totalD=9;
+	   const int fittingPointNums=55;//固定为55
+	   //由于最大支持3*3*3次数的样条体，所以fitting_restraint_Points的空间申请最多为55+9	   
+	   //先计算重心坐标
+	   CC restraintPoints_Centroidcoordinates[9] = {
+		CC( 1,0,0 ),
+		CC( 2.0f/3 ,1.0f / 3,0 ),CC(2.0f / 3,0,1.0f / 3 ),
+		CC( 1.0f / 3 ,2.0f / 3,0 ),CC( 1.0f / 3,0,2.0f / 3 ),
+		CC( 0,1,0 ),CC( 0,2.0f / 3,1.0f / 3 ),CC( 0,1.0f / 3,2.0f / 3 ),CC( 0,0,1 )
+	   };
+
+	   CC fittingPoints_Centroidcoordinates[55];
+	    int index = 0;
+	    for (int i = 1; i <= totalD + 1; i++) {
+		float rest = 1.0f / totalD*(i-1);
+		CC beginPoint = CC(1 - rest, rest, 0);
+		fittingPoints_Centroidcoordinates[index]=beginPoint;
+		index++;
+		float space = (i==1?0: rest / (i - 1));
+		for (int k = 1; k < i; k++) {			
+			CC tempPoint = CC(1 - rest, rest-space*k, space*k);
+			fittingPoints_Centroidcoordinates[index]=tempPoint;
+			index++;
+		}		
+	   }//拟合点重心坐标计算完毕
+
+	   Vertex fitting_restraint_Points[64];
+	   for (int i = 0; i < fittingPointNums; i++){
+	     fitting_restraint_Points[i]=calVertex_CP(fittingPoints_Centroidcoordinates[i]);
+	   }
+	   for (int i = 0; i < 9; i++){
+	     fitting_restraint_Points[i+fittingPointNums]=calVertex_CP(restraintPoints_Centroidcoordinates[i]);
+	   }
+	   //放置结果
+	   uint offset=64*workGroupId;
+	   for (int i = 0; i < 64; i++){
+	    outputbuffer.data[offset+i]=fitting_restraint_Points[i];
+	    outputbuffer_normal.data[offset+i]=vec4(fitting_restraint_Points[i].normal,0);
+	   }
+	      
+       
+	}//如果需要计算
+}//main结束

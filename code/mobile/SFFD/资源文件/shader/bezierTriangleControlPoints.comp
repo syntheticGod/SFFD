@@ -1,0 +1,58 @@
+#version 310 es
+
+layout(local_size_x = 1) in;
+
+
+uniform int triangle_nums;//原始点总数（三角形数*3）
+
+struct Vertex {
+vec3 position;
+vec4 tex_cord;
+vec3 normal;
+} ;
+
+layout(binding = 2,std430) readonly buffer VertexBuffer{
+	Vertex data[];
+}vertexBuffer;//重心插值后约束拟合点（64个为一组）
+
+layout(binding = 7,std430) readonly buffer PrecomputeMat{
+	float data[];
+}precomputeMat;
+
+layout(binding = 8,std430) writeonly buffer OutputTriangleControlPoints_position{
+	vec3 data[];
+}outputTriangleControlPoints_position;
+layout(binding = 9,std430) writeonly buffer OutputTriangleControlPoints_normal{
+	vec3 data[];
+}outputTriangleControlPoints_normal;
+
+
+void main()
+{
+        int work_id=int(gl_WorkGroupID.x*gl_NumWorkGroups.y*gl_NumWorkGroups.z+gl_WorkGroupID.y*gl_NumWorkGroups.z+gl_WorkGroupID.z);		
+		if(work_id<triangle_nums){//开始计算工作
+
+		int offset=work_id*64;
+        for (int i = 0; i < 10; i++){//一共算十行
+	     int base=i*64;		 
+		 float temptotalX=0.0f;
+		 float temptotalY=0.0f;
+		 float temptotalZ=0.0f;
+		 float temptotalX_n=0.0f;
+		 float temptotalY_n=0.0f;
+		 float temptotalZ_n=0.0f;
+	     for(int j=0;j<64;j++){	        
+				temptotalX+=precomputeMat.data[base+j]*vertexBuffer.data[offset+j].position.x;
+				temptotalY+=precomputeMat.data[base+j]*vertexBuffer.data[offset+j].position.y;
+				temptotalZ+=precomputeMat.data[base+j]*vertexBuffer.data[offset+j].position.z;
+				temptotalX_n+=precomputeMat.data[base+j]*vertexBuffer.data[offset+j].normal.x;
+				temptotalY_n+=precomputeMat.data[base+j]*vertexBuffer.data[offset+j].normal.y;
+				temptotalZ_n+=precomputeMat.data[base+j]*vertexBuffer.data[offset+j].normal.z;
+		  }
+		  outputTriangleControlPoints_position.data[work_id*10+i]=vec3(temptotalX,temptotalY,temptotalZ);
+		  outputTriangleControlPoints_normal.data[work_id*10+i]=vec3(temptotalX_n,temptotalY_n,temptotalZ_n);
+	   }//矩阵与向量组的乘法完毕
+       
+	}//如果需要计算
+	
+}//main结束

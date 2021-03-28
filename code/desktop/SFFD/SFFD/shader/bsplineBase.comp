@@ -1,0 +1,150 @@
+#version 460
+
+layout(local_size_x = 6) in;
+
+
+uniform int controlPonitNums[3];
+uniform int seg_nums[3];//seg_nums[i]=controlPonitNums[i]-degree[i];
+uniform uint pointOffset;//每一个点需要的float数
+uniform float controlPoints_localCordinate_singleDimention[6];//3*2，三个维度的参数定义域的下界、上界
+uniform int point_nums;//一共需要计算多少点
+
+struct Vertex {
+vec3 position;
+vec4 tex_cord;
+vec3 normal;
+} ;
+
+layout(binding = 1,std430) writeonly buffer BsplineBase_perPoint_buffer{
+	float data[];
+}bsplineBase_perPoint_buffer;//每一个点的b样条基
+
+layout(binding = 2,std430) readonly buffer InputVertexBuffer{
+	Vertex data[];
+}inputVertexBuffer;//重心插值后约束拟合点（64个为一组）
+
+layout(binding = 3,std430) readonly buffer Base_x {//最高支持三次b样条体，多项式为4位,布局为i*seg，每个vec若高位次数不到则设置为0
+	vec4 data[];
+}base_x;
+
+layout(binding = 4,std430) readonly buffer Base_y {
+	vec4 data[];
+}base_y;
+
+layout(binding = 5,std430) readonly buffer Base_z{
+	vec4 data[];
+}base_z;
+
+layout(binding = 6,std430) readonly buffer Base_x_derivative{//低一次的b样条基，i的下标从0开始到n+1结束（即个数比高一次的b样条基多1）
+	vec4 data[];
+}base_x_derivative;
+layout(binding = 7,std430) readonly buffer Base_y_derivative{
+	vec4 data[];
+}base_y_derivative;
+layout(binding = 8,std430) readonly buffer Base_z_derivative{
+	vec4 data[];
+}base_z_derivative;
+
+
+float space[3];
+int segs[3];
+
+
+int calSeg(int dimention, in float t) {
+	int result=int((t - controlPoints_localCordinate_singleDimention[dimention * 2]) / space[dimention]);
+	if(result>=seg_nums[dimention])
+	     result=seg_nums[dimention]-1;
+	return result;	
+}
+
+
+float calBase_X(int point_index, float t) {//二者均0基
+	int seg = segs[0];
+	int offset = point_index * seg_nums[0] + seg;
+	vec4 polynomial=base_x.data[offset];
+	float result = polynomial.x+polynomial.y*t+polynomial.z*t*t+polynomial.w*t*t*t;
+	return result;
+}
+float calBase_Y(int point_index, float t) {//二者均0基
+	int seg = segs[1];
+	int offset = point_index * seg_nums[1] + seg;
+	vec4 polynomial=base_y.data[offset];
+	float result = polynomial.x+polynomial.y*t+polynomial.z*t*t+polynomial.w*t*t*t;
+	return result;
+}
+float calBase_Z(int point_index, float t) {//二者均0基
+	int seg = segs[2];
+	int offset = point_index * seg_nums[2] + seg;
+	vec4 polynomial=base_z.data[offset];
+	float result = polynomial.x+polynomial.y*t+polynomial.z*t*t+polynomial.w*t*t*t;
+	return result;
+}
+
+float calBase_X_derivative(int point_index, float t) {//二者均0基,seg的段数在求导前后均不变，
+	int seg = segs[0];
+	int offset = point_index * seg_nums[0] + seg;
+	vec4 polynomial=base_x_derivative.data[offset];
+	float result = polynomial.x+polynomial.y*t+polynomial.z*t*t+polynomial.w*t*t*t;
+	return result;
+}
+float calBase_Y_derivative(int point_index, float t) {//二者均0基
+	int seg = segs[1];
+	int offset = point_index * seg_nums[1] + seg;
+	vec4 polynomial=base_y_derivative.data[offset];
+	float result = polynomial.x+polynomial.y*t+polynomial.z*t*t+polynomial.w*t*t*t;
+	return result;
+}
+float calBase_Z_derivative(int point_index, float t) {//二者均0基
+	int seg = segs[2];
+	int offset = point_index * seg_nums[2] + seg;
+	vec4 polynomial=base_z_derivative.data[offset];
+	float result = polynomial.x+polynomial.y*t+polynomial.z*t*t+polynomial.w*t*t*t;
+	return result;
+}
+
+void main()
+{
+        uint work_id=gl_WorkGroupID.x*gl_NumWorkGroups.y*gl_NumWorkGroups.z+gl_WorkGroupID.y*gl_NumWorkGroups.z+gl_WorkGroupID.z;		
+		if(work_id<point_nums){
+		   uint baseOffset=pointOffset*work_id;
+		   vec3 pos=inputVertexBuffer.data[work_id].position;
+		   for(int i=0;i<3;i++){
+		   		   	float range = controlPoints_localCordinate_singleDimention[i * 2 + 1] - controlPoints_localCordinate_singleDimention[i * 2];
+	                space[i] = range/ seg_nums[i];					
+		   }
+		   segs[0]=calSeg(0, pos.x);
+		   segs[1]=calSeg(1, pos.y);
+		   segs[2]=calSeg(2, pos.z);
+		   int offset_dx=controlPonitNums[0];
+		   int offset_y=offset_dx+controlPonitNums[0]-1;
+		   int offset_dy=offset_y+controlPonitNums[1];
+		   int offset_z=offset_dy+controlPonitNums[1]-1;
+		   int offset_dz=offset_z+controlPonitNums[2];
+		   switch(gl_LocalInvocationID.x){
+		   case 0://计算N(i,x)
+		          for(int i=0;i<controlPonitNums[0];i++)
+				        bsplineBase_perPoint_buffer.data[baseOffset+i]=calBase_X(i,pos.x);
+				  break;
+           case 1://计算低一次N(i,x)
+		          for(int i=0;i<controlPonitNums[0]-1;i++)
+				        bsplineBase_perPoint_buffer.data[baseOffset+i+offset_dx]=calBase_X_derivative(i,pos.x);
+				  break;
+           case 2:
+		          for(int i=0;i<controlPonitNums[1];i++)
+				        bsplineBase_perPoint_buffer.data[baseOffset+i+offset_y]=calBase_Y(i,pos.y);
+				  break;
+           case 3:
+		          for(int i=0;i<controlPonitNums[1]-1;i++)
+				        bsplineBase_perPoint_buffer.data[baseOffset+i+offset_dy]=calBase_Y_derivative(i,pos.y);
+				  break;
+           case 4:
+		          for(int i=0;i<controlPonitNums[2];i++)
+				        bsplineBase_perPoint_buffer.data[baseOffset+i+offset_z]=calBase_Z(i,pos.z);		
+				  break; 
+           case 5:
+		          for(int i=0;i<controlPonitNums[2]-1;i++)
+				        bsplineBase_perPoint_buffer.data[baseOffset+i+offset_dz]=calBase_Z_derivative(i,pos.z);
+				  break;	   		   	   
+		   }
+	}//如果需要计算
+}//main结束

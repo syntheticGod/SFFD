@@ -1,0 +1,83 @@
+#version 460
+
+layout(local_size_x = 1) in;
+
+
+uniform int triangle_nums;//原始点总数（三角形数*3）
+
+struct Vertex {
+vec3 position;
+vec4 tex_cord;
+vec3 normal;
+} ;
+
+layout(binding = 2,std430) readonly buffer VertexBuffer{
+	Vertex data[];
+}vertexBuffer;//重心插值后约束拟合点（64个为一组）
+
+layout(binding = 7,std430) readonly buffer PrecomputeMat{
+	float data[];
+}precomputeMat;
+
+layout(binding = 8,std430) writeonly buffer OutputTriangleControlPoints_position{
+	vec3 data[];
+}outputTriangleControlPoints_position;
+layout(binding = 9,std430) writeonly buffer OutputTriangleControlPoints_normal{
+	vec3 data[];
+}outputTriangleControlPoints_normal;
+
+Vertex originVertex_afterDeformation[3];//变形后的原始三角形三顶点
+
+vec3 calVertex_projection(vec3 position,int vectexIndex){//参数即待投影的点位置，要投影到的顶点的下标，该函数用于调整控制顶点
+vec3 vectexPos=originVertex_afterDeformation[vectexIndex].position;
+float a=originVertex_afterDeformation[vectexIndex].normal.x;
+float b=originVertex_afterDeformation[vectexIndex].normal.y;
+float c=originVertex_afterDeformation[vectexIndex].normal.z;
+float t=(a*vectexPos.x+b*vectexPos.y+c*vectexPos.z-(a*position.x+b*position.y+c*position.z))/(a*a+b*b+c*c);
+return vec3(position.x+a*t,position.y+b*t,position.z+c*t);
+}
+void main()
+{
+        uint work_id=gl_WorkGroupID.x*gl_NumWorkGroups.y*gl_NumWorkGroups.z+gl_WorkGroupID.y*gl_NumWorkGroups.z+gl_WorkGroupID.z;		
+		if(work_id<triangle_nums){//开始计算工作
+
+		uint offset=work_id*64;
+		originVertex_afterDeformation[0]=vertexBuffer.data[offset+55];
+		originVertex_afterDeformation[1]=vertexBuffer.data[offset+60];
+		originVertex_afterDeformation[2]=vertexBuffer.data[offset+63];
+		
+		vec3 position_result[10];
+		int adjust_index_1[3]={1,3,5};
+		int adjust_index_2[3]={2,7,8};
+        for (int i = 0; i < 10; i++){//一共算十行
+	     int base=i*64;		 
+		 float temptotalX=0;
+		 float temptotalY=0;
+		 float temptotalZ=0;
+		 float temptotalX_n=0;
+		 float temptotalY_n=0;
+		 float temptotalZ_n=0;
+	     for(int j=0;j<64;j++){	        
+				temptotalX+=precomputeMat.data[base+j]*vertexBuffer.data[offset+j].position.x;
+				temptotalY+=precomputeMat.data[base+j]*vertexBuffer.data[offset+j].position.y;
+				temptotalZ+=precomputeMat.data[base+j]*vertexBuffer.data[offset+j].position.z;
+				temptotalX_n+=precomputeMat.data[base+j]*vertexBuffer.data[offset+j].normal.x;
+				temptotalY_n+=precomputeMat.data[base+j]*vertexBuffer.data[offset+j].normal.y;
+				temptotalZ_n+=precomputeMat.data[base+j]*vertexBuffer.data[offset+j].normal.z;
+		  }
+		  position_result[i]=vec3(temptotalX,temptotalY,temptotalZ);
+		  //outputTriangleControlPoints_position.data[work_id*10+i]=vec3(temptotalX,temptotalY,temptotalZ);
+		  outputTriangleControlPoints_normal.data[work_id*10+i]=vec3(temptotalX_n,temptotalY_n,temptotalZ_n);
+	   }//矩阵与向量组的乘法完毕
+       
+	   //进行需要的调整
+	   for (int i = 0; i < 3; i++){
+	       position_result[adjust_index_1[i]]=calVertex_projection(position_result[adjust_index_1[i]],i);
+		   position_result[adjust_index_2[i]]=calVertex_projection(position_result[adjust_index_2[i]],i);
+	   }
+	   //输出结果（位置）
+	   for (int i = 0; i < 10; i++)
+	       outputTriangleControlPoints_position.data[work_id*10+i]=position_result[i];
+	}//如果需要计算
+	
+}//main结束

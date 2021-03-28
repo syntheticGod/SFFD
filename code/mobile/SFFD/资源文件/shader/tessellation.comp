@@ -1,0 +1,100 @@
+#version 310 es
+
+layout(local_size_x = 1) in;
+
+
+uniform int triangle_nums;//一共需要计算多少三角形
+uniform int tessellationPointNums;//细分点总数
+uniform int tessellationTriangleNums;//细分三角形总数=段数*段数
+uniform int tessellationTimes;//每条边细分段数，一般为5
+struct Vertex {
+vec3 position;
+vec4 tex_cord;
+vec3 normal;
+} ;
+struct CC {
+	float u, v, w;
+};
+
+layout(binding = 8,std430) readonly buffer OutputTriangleControlPoints_position{
+	vec3 data[];
+}outputTriangleControlPoints_position;
+layout(binding = 9,std430) readonly buffer OutputTriangleControlPoints_normal{
+	vec3 data[];
+}outputTriangleControlPoints_normal;
+
+layout(binding = 10,std430) readonly buffer TexCordBuffer{//存储原始三角片的三顶点的纹理坐标（三个为一组）
+	vec2 data[];
+}texCordBuffer;
+
+layout(binding = 11,std430) readonly buffer PrecomputeMat{//细分预计算矩阵
+	float data[];
+}precomputeMat;
+
+layout(binding = 12,std430) writeonly buffer OutputBuffer_Vertex{//细分后结果，紧密排列，渲染需要indices配合，后者用cpu计算一次即可，无需改变
+	Vertex data[];
+}outputBuffer_Vertex;
+
+//绑定点13为indices
+
+
+vec2 origin_texcord[3];
+
+
+void main()
+{
+        int workGroupId=int(gl_WorkGroupID.x*gl_NumWorkGroups.y*gl_NumWorkGroups.z+gl_WorkGroupID.y*gl_NumWorkGroups.z+gl_WorkGroupID.z);		
+		if(workGroupId<triangle_nums){
+		int baseOffset=workGroupId*tessellationPointNums;
+		int controlPointsOffset=workGroupId*10;
+        for(int i=0;i<3;i++)
+		     origin_texcord[i]=texCordBuffer.data[workGroupId*3+i];
+
+	   //开始矩阵与向量组的乘法，计算几何位置
+	   for (int i = 0; i < tessellationPointNums; i++){
+	     int base=i*10;
+		 float temptotalX=0.0f;
+		 float temptotalY=0.0f;
+		 float temptotalZ=0.0f;
+		 float temptotalX_normal=0.0f;
+		 float temptotalY_normal=0.0f;
+		 float temptotalZ_normal=0.0f;
+	     for(int j=0;j<10;j++){
+		        float mat_temp=precomputeMat.data[base+j];
+				if(mat_temp!=0.0f){
+				temptotalX+=mat_temp*outputTriangleControlPoints_position.data[controlPointsOffset+j].x;
+				temptotalY+=mat_temp*outputTriangleControlPoints_position.data[controlPointsOffset+j].y;
+				temptotalZ+=mat_temp*outputTriangleControlPoints_position.data[controlPointsOffset+j].z;
+				temptotalX_normal+=mat_temp*outputTriangleControlPoints_normal.data[controlPointsOffset+j].x;
+				temptotalY_normal+=mat_temp*outputTriangleControlPoints_normal.data[controlPointsOffset+j].y;
+				temptotalZ_normal+=mat_temp*outputTriangleControlPoints_normal.data[controlPointsOffset+j].z;
+				}	        		
+		  }
+		  outputBuffer_Vertex.data[baseOffset+i].position=vec3(temptotalX,temptotalY,temptotalZ);
+		  outputBuffer_Vertex.data[baseOffset+i].normal=vec3(temptotalX_normal,temptotalY_normal,temptotalZ_normal);
+	   }//矩阵与向量组的乘法完毕
+
+	    CC cps[21];//目前最大支持到细分到5段
+	   //计算细分点的质心坐标
+	    int index = 0;
+	    for (int i = 1; i <= tessellationTimes + 1; i++) {
+		    float rest = 1.0f / float(tessellationTimes)*float(i - 1);
+		    CC beginPoint = CC(1.0f - rest, rest, 0.0f);
+		    cps[index]=beginPoint;
+		    index++;
+		    float space = (i == 1 ? 0.0f : rest / float(i - 1));
+		    for (int k = 1; k < i; k++) {
+			       CC tempPoint = CC(1.0f - rest, rest - space*float(k), space*float(k));
+			       cps[index]=tempPoint;
+				   index++;
+		       }
+	     }
+
+	   //计算纹理坐标,用质心坐标算
+	   for (int i = 0; i < tessellationPointNums; i++){
+	         vec2 texC=origin_texcord[0]*cps[i].u+origin_texcord[1]*cps[i].v+origin_texcord[2]*cps[i].w;
+	         outputBuffer_Vertex.data[baseOffset+i].tex_cord=vec4(texC,0.0f,0.0f);
+	   }
+		
+	}//如果需要计算
+}//main结束

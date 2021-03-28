@@ -1,0 +1,157 @@
+#version 310 es
+
+layout(local_size_x = 1) in;
+
+
+
+uniform int controlPonitNums[3];
+uniform uint pointOffset;//每一个点需要的float数
+uniform int point_nums;//一共需要计算多少点
+
+struct Vertex {
+vec3 position;
+vec4 tex_cord;
+vec3 normal;
+} ;
+
+layout(binding = 1,std430) readonly buffer BsplineBase_perPoint_buffer{
+	float data[];
+}bsplineBase_perPoint_buffer;//每一个点的b样条基
+
+layout(binding = 2,std430) writeonly buffer VertexBuffer{
+	Vertex data[];
+}vertexBuffer;//重心插值后约束拟合点（64个为一组）
+
+layout(binding = 3,std430) readonly buffer ControlPoints {//i*i*i，i为控制顶点数，记得加padding
+	vec3 data[];
+}controlPoints;
+
+layout(binding = 4,std430) readonly buffer ControlPoints_derivative_x {//i-1*i*i，i为控制顶点数，记得加padding
+	vec3 data[];
+}controlPoints_derivative_x;
+layout(binding = 5,std430) readonly buffer ControlPoints_derivative_y {//i*i-1*i，i为控制顶点数，记得加padding
+	vec3 data[];
+}controlPoints_derivative_y;
+layout(binding = 6,std430) readonly buffer ControlPoints_derivative_z {//i*i*i-1，i为控制顶点数，记得加padding
+	vec3 data[];
+}controlPoints_derivative_z;
+
+layout(binding = 14,std430) readonly buffer Buffer_normal{
+	vec4 data[];
+}buffer_normal;//输出重心插值后各点的法向坐标（64个为一组）
+
+void main()
+{
+
+
+        int work_id=int(gl_WorkGroupID.x*gl_NumWorkGroups.y*gl_NumWorkGroups.z+gl_WorkGroupID.y*gl_NumWorkGroups.z+gl_WorkGroupID.z);
+		if(work_id<point_nums){
+		     int baseOffset=int(pointOffset)*work_id;//开始取用的b样条基下标
+		     int offset_dx=controlPonitNums[0];
+		     int offset_y=offset_dx+controlPonitNums[0]-1;
+		     int offset_dy=offset_y+controlPonitNums[1];
+		     int offset_z=offset_dy+controlPonitNums[1]-1;
+		     int offset_dz=offset_z+controlPonitNums[2];
+
+			 //计算变形后法向
+	    vec3 Jmat[3];//列主矩阵，按列排三个vec3
+        vec3 normal=vec3(0.0f,0.0f,0.0f);
+	for (int i = 0; i<controlPonitNums[0]-1; i++) {
+		for (int j = 0; j<controlPonitNums[1]; j++) {
+			for (int k = 0; k<controlPonitNums[2]; k++) {
+			      if(bsplineBase_perPoint_buffer.data[baseOffset+offset_dx+i]==0.0f||bsplineBase_perPoint_buffer.data[baseOffset+offset_y+j]==0.0f||bsplineBase_perPoint_buffer.data[baseOffset+offset_z+k]==0.0f)
+				     continue;
+				  else{
+				     int index = i*controlPonitNums[1] * controlPonitNums[2] + j*controlPonitNums[2] + k;
+				     vec3 controlPonit = controlPoints_derivative_x.data[index];
+				     normal = normal + controlPonit*bsplineBase_perPoint_buffer.data[baseOffset+offset_dx+i]*
+					                                bsplineBase_perPoint_buffer.data[baseOffset+offset_y+j]*
+													bsplineBase_perPoint_buffer.data[baseOffset+offset_z+k];
+				      }				
+				
+		                  }		
+					    }
+					  }
+		Jmat[0]=normal;
+		normal=vec3(0.0f,0.0f,0.0f);
+	    
+	for (int i = 0; i<controlPonitNums[0]; i++) {
+		for (int j = 0; j<controlPonitNums[1]-1; j++) {
+			for (int k = 0; k<controlPonitNums[2]; k++) {
+			      if(bsplineBase_perPoint_buffer.data[baseOffset+i]==0.0f||bsplineBase_perPoint_buffer.data[baseOffset+offset_dy+j]==0.0f||bsplineBase_perPoint_buffer.data[baseOffset+offset_z+k]==0.0f)
+				     continue;
+				  else{
+				     int index = j*controlPonitNums[0] * controlPonitNums[2] + i*controlPonitNums[2] + k;
+				     vec3 controlPonit = controlPoints_derivative_y.data[index];
+				     normal = normal + controlPonit*bsplineBase_perPoint_buffer.data[baseOffset+i]*
+					                                bsplineBase_perPoint_buffer.data[baseOffset+offset_dy+j]*
+													bsplineBase_perPoint_buffer.data[baseOffset+offset_z+k];
+				      }	
+
+		                  }		
+					    }
+					  }
+		Jmat[1]=normal;
+		normal=vec3(0.0f,0.0f,0.0f);
+
+	for (int i = 0; i<controlPonitNums[0]; i++) {
+		for (int j = 0; j<controlPonitNums[1]; j++) {
+			for (int k = 0; k<controlPonitNums[2]-1; k++) {
+			      if(bsplineBase_perPoint_buffer.data[baseOffset+i]==0.0f||bsplineBase_perPoint_buffer.data[baseOffset+offset_y+j]==0.0f||bsplineBase_perPoint_buffer.data[baseOffset+offset_dz+k]==0.0f)
+				     continue;
+				  else{
+				     int index = k*controlPonitNums[0] * controlPonitNums[1] + i*controlPonitNums[1] + j;
+				     vec3 controlPonit = controlPoints_derivative_z.data[index];
+				     normal = normal + controlPonit*bsplineBase_perPoint_buffer.data[baseOffset+i]*
+					                                bsplineBase_perPoint_buffer.data[baseOffset+offset_y+j]*
+													bsplineBase_perPoint_buffer.data[baseOffset+offset_dz+k];
+				      }	
+
+		                  }		
+					    }
+					  }
+		Jmat[2]=normal;
+
+		//计算伴随矩阵（x123即第一行的123元素）
+		float x1=Jmat[1].y*Jmat[2].z-Jmat[1].z*Jmat[2].y;
+		float y1=-1.0f*(Jmat[1].x*Jmat[2].z-Jmat[1].z*Jmat[2].x);
+        float z1=Jmat[1].x*Jmat[2].y-Jmat[1].y*Jmat[2].x;
+		float x2=-1.0f*(Jmat[0].y*Jmat[2].z-Jmat[0].z*Jmat[2].y);
+		float y2=Jmat[0].x*Jmat[2].z-Jmat[0].z*Jmat[2].x;
+        float z2=-1.0f*(Jmat[0].x*Jmat[2].y-Jmat[0].y*Jmat[2].x);
+		float x3=Jmat[0].y*Jmat[1].z-Jmat[0].z*Jmat[1].y;
+		float y3=-1.0f*(Jmat[0].x*Jmat[1].z-Jmat[0].z*Jmat[1].x);
+		float z3=Jmat[0].x*Jmat[1].y-Jmat[0].y*Jmat[1].x;
+
+		vec4 origin_normal=buffer_normal.data[work_id];
+		
+		//矩阵向量乘法
+		
+		float result_x=x1*origin_normal.x+x2*origin_normal.y+x3*origin_normal.z;
+		float result_y=y1*origin_normal.x+y2*origin_normal.y+y3*origin_normal.z;
+		float result_z=z1*origin_normal.x+z2*origin_normal.y+z3*origin_normal.z;
+		
+		vertexBuffer.data[work_id].normal=vec3(result_x,result_y,result_z);
+		//vertexBuffer.data[work_id].normal=Jmat[1];
+			 //计算变形后几何位置
+          vec3 position=vec3(0.0f,0.0f,0.0f);
+		  for(int i=0;i<controlPonitNums[0];i++){
+	         for(int j=0;j<controlPonitNums[1];j++){
+		       for(int k=0;k<controlPonitNums[2];k++){
+			      if(bsplineBase_perPoint_buffer.data[baseOffset+i]==0.0f||bsplineBase_perPoint_buffer.data[baseOffset+offset_y+j]==0.0f||bsplineBase_perPoint_buffer.data[baseOffset+offset_z+k]==0.0f)
+				     continue;
+				  else{
+				     int index=i*controlPonitNums[1]*controlPonitNums[2]+j*controlPonitNums[2]+k;
+					 vec3 controlPonit=controlPoints.data[index];
+					 float temptotal=bsplineBase_perPoint_buffer.data[baseOffset+i]*
+				                     bsplineBase_perPoint_buffer.data[baseOffset+offset_y+j]*
+					                 bsplineBase_perPoint_buffer.data[baseOffset+offset_z+k];
+			         position=position+controlPonit*temptotal;
+				       }
+
+		                  }		
+					    }
+					  }//三层for结束
+		   vertexBuffer.data[work_id].position=position;	
+	}//如果需要计算
+}//main结束

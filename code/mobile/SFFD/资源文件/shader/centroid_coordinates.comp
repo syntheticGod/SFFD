@@ -1,0 +1,51 @@
+#version 310 es
+
+layout(local_size_x = 12,local_size_y = 12) in;
+layout(binding = 0) readonly buffer TriangleInput {
+	vec3 data[];
+}triangleInput;
+
+layout(binding = 1) readonly buffer TriangleCutStyle {
+	vec3 data[];
+}triangleCutStyle;
+
+layout(binding = 2) readonly buffer CutStyleAddress {//各种切割样式的当前累加大小，即地址,没有*3
+	int data[];
+}cutStyleAddress;
+
+layout(binding = 3) readonly buffer CutStyleIndex{//当前本地工作组所属的切割方案号
+	int data[];
+}cutStyleIndex;
+
+layout(binding = 4) readonly buffer TriangleDataOutputAddress{//当前本地工作组要输出的三角形地址基址，没有*3
+	int data[];
+}triangleDataOutputAddress;
+
+layout(binding = 5) writeonly buffer OutputData {//各种切割样式的当前累加大小
+	vec3 data[];
+}outputData;
+
+uniform int totalTriangleNums;
+
+void main()
+{
+int global_index=gl_WorkGroupID.x*gl_NumWorkGroups.y+gl_WorkGroupID.y;
+int local_index=gl_LocalInvocationID.x* gl_WorkGroupSize.y+gl_LocalInvocationID.y;
+if(global_index<totalTriangleNums){
+int style_index=cutStyleIndex.data[global_index];
+int style_address=cutStyleAddress.data[style_index]*3;
+int base_outputAddress=triangleDataOutputAddress.data[style_index]*3;
+
+vec3 base_triAngleVertex1=triangleInput.data[global_index*3];
+vec3 base_triAngleVertex2=triangleInput.data[global_index*3+1];
+vec3 base_triAngleVertex3=triangleInput.data[global_index*3+2];
+vec3 centroid_coordinates1=triangleCutStyle.data[style_address];
+vec3 centroid_coordinates2=triangleCutStyle.data[style_address+1];
+vec3 centroid_coordinates3=triangleCutStyle.data[style_address+2];
+
+outputData.data[base_outputAddress+local_index*3]=centroid_coordinates1.x*base_triAngleVertex1+centroid_coordinates1.y*base_triAngleVertex2+centroid_coordinates1.z*base_triAngleVertex3;
+outputData.data[base_outputAddress+local_index*3+1]=centroid_coordinates2.x*base_triAngleVertex1+centroid_coordinates2.y*base_triAngleVertex2+centroid_coordinates2.z*base_triAngleVertex3;
+outputData.data[base_outputAddress+local_index*3+2]=centroid_coordinates3.x*base_triAngleVertex1+centroid_coordinates3.y*base_triAngleVertex2+centroid_coordinates3.z*base_triAngleVertex3;
+}
+
+}

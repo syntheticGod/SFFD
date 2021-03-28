@@ -1,0 +1,341 @@
+#version 310 es
+
+layout(local_size_x = 1) in;
+
+
+uniform int degree[3];//对应维度xyz次数
+uniform int controlPonitNums[3];
+uniform float controlPoints_localCordinate_singleDimention[6];//3*2，三个维度的参数定义域的下界、上界
+uniform int vertex_nums;//一共需要计算多少点
+
+struct Vertex {
+vec3 position;
+vec4 tex_cord;
+vec3 normal;
+} ;
+struct CC {
+	float u, v, w;
+};
+
+
+layout(binding = 0,std430) readonly buffer ControlPoints {//i*i*i，i为控制顶点数，记得加padding
+	vec3 data[];
+}controlPoints;
+
+layout(binding = 1,std430) readonly buffer Base_x {//最高支持三次b样条体，多项式为4位,布局为i*seg，每个vec若高位次数不到则设置为0
+	vec4 data[];
+}base_x;
+
+layout(binding = 2,std430) readonly buffer Base_y {
+	vec4 data[];
+}base_y;
+
+layout(binding = 3,std430) readonly buffer Base_z{
+	vec4 data[];
+}base_z;
+
+layout(binding = 4,std430) readonly buffer VertexBuffer{//整个过程不变
+	Vertex data[];
+}vertexbuffer;
+
+layout(binding = 8,std430) readonly buffer IndicesBuffer{//整个过程不变
+	int data[];
+}indicesBuffer;
+
+layout(binding = 5,std430) writeonly buffer Outputbuffer{
+	Vertex data[];
+}outputbuffer;//输出变形后的原始三角形（三个vertex为一组）
+
+layout(binding = 6,std430) readonly buffer PrecomputeMat{
+	float data[];
+}precomputeMat;
+
+layout(binding = 7,std430) writeonly buffer OutputTriangleControlPoints{
+	vec3 data[];
+}outputTriangleControlPoints;
+
+layout(binding = 9,std430) readonly buffer KnotVector_x{//节点向量,传p+n+1个，即次数+控制顶点数+1
+	float data[];
+}knotVector_x;
+layout(binding = 10,std430) readonly buffer KnotVector_y{//节点向量
+	float data[];
+}knotVector_y;
+layout(binding = 11,std430) readonly buffer KnotVector_z{//节点向量
+	float data[];
+}knotVector_z;
+
+layout(binding = 12,std430) readonly buffer Base_x_derivative{//低一次的b样条基，i的下标从0开始到n+1结束（即个数比高一次的b样条基多1）
+	vec4 data[];
+}base_x_derivative;
+layout(binding = 13,std430) readonly buffer Base_y_derivative{
+	vec4 data[];
+}base_y_derivative;
+layout(binding = 14,std430) readonly buffer Base_z_derivative{
+	vec4 data[];
+}base_z_derivative;
+
+
+int seg_nums[3];
+Vertex origin_vertex[3];
+
+
+
+
+int calSeg(int dimention, in float t) {
+	float range = controlPoints_localCordinate_singleDimention[dimention * 2 + 1] - controlPoints_localCordinate_singleDimention[dimention * 2];
+	float space = range / seg_nums[dimention];
+
+	int result=int((t - controlPoints_localCordinate_singleDimention[dimention * 2]) / space);
+	if(result>=seg_nums[dimention])
+	     result=seg_nums[dimention]-1;
+	return result;	
+}
+
+
+float calBase_X(int point_index, float t) {//二者均0基
+	int seg = calSeg(0, t);
+	int offset = point_index * seg_nums[0] + seg;
+	vec4 polynomial=base_x.data[offset];
+	float result = polynomial.x+polynomial.y*t+polynomial.z*t*t+polynomial.w*t*t*t;
+	return result;
+}
+float calBase_Y(int point_index, float t) {//二者均0基
+	int seg = calSeg(1, t);
+	int offset = point_index * seg_nums[1] + seg;
+	vec4 polynomial=base_y.data[offset];
+	float result = polynomial.x+polynomial.y*t+polynomial.z*t*t+polynomial.w*t*t*t;
+	return result;
+}
+float calBase_Z(int point_index, float t) {//二者均0基
+	int seg = calSeg(2, t);
+	int offset = point_index * seg_nums[2] + seg;
+	vec4 polynomial=base_z.data[offset];
+	float result = polynomial.x+polynomial.y*t+polynomial.z*t*t+polynomial.w*t*t*t;
+	return result;
+}
+
+float calBase_X_derivative(int point_index, float t) {//二者均0基,seg的段数在求导前后均不变，
+	int seg = calSeg(0, t);
+	int offset = point_index * seg_nums[0] + seg;
+	vec4 polynomial_left=base_x_derivative.data[offset];
+	offset+=seg_nums[0];
+	vec4 polynomial_right=base_x_derivative.data[offset];
+	float result_left = polynomial_left.x+polynomial_left.y*t+polynomial_left.z*t*t+polynomial_left.w*t*t*t;
+	float result_right = polynomial_right.x+polynomial_right.y*t+polynomial_right.z*t*t+polynomial_right.w*t*t*t;
+
+	//result_left=result_left*degree[0]/(knotVector_x.data[point_index+degree[0]]-knotVector_x.data[point_index]);
+	//result_right=result_right*degree[0]/(knotVector_x.data[point_index+degree[0]+1]-knotVector_x.data[point_index+1]);
+	//return result_left-result_right;
+	return knotVector_x.data[point_index];
+}
+float calBase_Y_derivative(int point_index, float t) {//二者均0基
+	int seg = calSeg(1, t);
+	int offset = point_index * seg_nums[1] + seg;
+	vec4 polynomial_left=base_y_derivative.data[offset];
+	offset+=seg_nums[1];
+	vec4 polynomial_right=base_y_derivative.data[offset];
+	float result_left = polynomial_left.x+polynomial_left.y*t+polynomial_left.z*t*t+polynomial_left.w*t*t*t;
+	float result_right = polynomial_right.x+polynomial_right.y*t+polynomial_right.z*t*t+polynomial_right.w*t*t*t;
+
+	result_left=result_left*degree[0]/(knotVector_y.data[point_index+degree[0]]-knotVector_y.data[point_index]);
+	result_right=result_right*degree[0]/(knotVector_y.data[point_index+degree[0]+1]-knotVector_y.data[point_index+1]);
+	float result=result_left-result_right;
+	return result;
+}
+float calBase_Z_derivative(int point_index, float t) {//二者均0基
+	int seg = calSeg(2, t);
+	int offset = point_index * seg_nums[2] + seg;
+	vec4 polynomial_left=base_z_derivative.data[offset];
+	offset+=seg_nums[0];
+	vec4 polynomial_right=base_z_derivative.data[offset];
+	float result_left = polynomial_left.x+polynomial_left.y*t+polynomial_left.z*t*t+polynomial_left.w*t*t*t;
+	float result_right = polynomial_right.x+polynomial_right.y*t+polynomial_right.z*t*t+polynomial_right.w*t*t*t;
+
+	result_left=result_left*degree[0]/(knotVector_z.data[point_index+degree[0]]-knotVector_z.data[point_index]);
+	result_right=result_right*degree[0]/(knotVector_z.data[point_index+degree[0]+1]-knotVector_z.data[point_index+1]);
+	float result=result_left-result_right;
+	return result;
+}
+float cal_determinant(float x1,float y1,float x2,float y2){//依列排
+return x1*y2-y1*x2;
+}
+vec3 calNormal_afterDeformation(vec3 position_pragma,vec3 origin_normal){
+  //先计算雅可比矩阵,每次算一列（三个元素，对应向量的x,y,z）
+       
+        vec3 Jmat[3];//列主矩阵，按列排三个vec3
+        vec3 normal=vec3(0.0f,0.0f,0.0f);
+	    for(int i=0;i<controlPonitNums[0];i++){
+	        for(int j=0;j<controlPonitNums[1];j++){
+		      for(int k=0;k<controlPonitNums[2];k++){
+			      int index=i*(controlPonitNums[1])*(controlPonitNums[2])+j*(controlPonitNums[2])+k;
+				  vec3 controlPonit=controlPoints.data[index];
+				  float tempx=calBase_X(i,position_pragma.x);
+				  float tempy=calBase_Y(j,position_pragma.y);
+				  float tempz=calBase_Z(k,position_pragma.z);
+				  float temptotal=tempx*tempy*tempz;
+			      normal=normal+controlPonit*temptotal;
+		                  }		
+					    }
+					  }
+		Jmat[0]=normal;
+		normal=vec3(0.0f,0.0f,0.0f);
+	    
+		for(int i=0;i<controlPonitNums[0];i++){
+	        for(int j=0;j<controlPonitNums[1];j++){
+		      for(int k=0;k<controlPonitNums[2];k++){
+			      int index=i*(controlPonitNums[1])*(controlPonitNums[2])+j*(controlPonitNums[2])+k;
+				  vec3 controlPonit=controlPoints.data[index];
+				  float tempx=calBase_X(i,position_pragma.x);
+				  float tempy=calBase_Y(j,position_pragma.y);
+				  float tempz=calBase_Z(k,position_pragma.z);
+				  float temptotal=tempx*tempy*tempz;
+			      normal=normal+controlPonit*temptotal;
+		                  }		
+					    }
+					  }
+		Jmat[1]=normal;
+		normal=vec3(0.0f,0.0f,0.0f);
+
+		for(int i=0;i<controlPonitNums[0];i++){
+	        for(int j=0;j<controlPonitNums[1];j++){
+		      for(int k=0;k<controlPonitNums[2];k++){
+			      int index=i*(controlPonitNums[1])*(controlPonitNums[2])+j*(controlPonitNums[2])+k;
+				  vec3 controlPonit=controlPoints.data[index];
+				  float tempx=calBase_X(i,position_pragma.x);
+				  float tempy=calBase_Y(j,position_pragma.y);
+				  float tempz=calBase_Z(k,position_pragma.z);
+				  float temptotal=tempx*tempy*tempz;
+			      normal=normal+controlPonit*temptotal;
+		                  }		
+					    }
+					  }
+		Jmat[2]=normal;
+		normal=vec3(0.0f,0.0f,0.0f);
+
+		//计算伴随矩阵（x123即第一行的123元素）
+		float x1=cal_determinant(Jmat[1].y,Jmat[1].z,Jmat[2].y,Jmat[2].z);
+		float x2=-1*cal_determinant(Jmat[1].x,Jmat[1].z,Jmat[2].x,Jmat[2].z);
+		float x3=cal_determinant(Jmat[1].x,Jmat[1].y,Jmat[2].x,Jmat[2].y);
+		float y1=-1*cal_determinant(Jmat[0].y,Jmat[0].z,Jmat[2].y,Jmat[2].z);
+		float y2=cal_determinant(Jmat[0].x,Jmat[0].z,Jmat[2].x,Jmat[2].z);
+		float y3=-1*cal_determinant(Jmat[0].x,Jmat[0].y,Jmat[2].x,Jmat[2].y);
+		float z1=cal_determinant(Jmat[0].y,Jmat[0].z,Jmat[1].y,Jmat[1].z);
+		float z2=-1*cal_determinant(Jmat[0].x,Jmat[0].z,Jmat[1].x,Jmat[1].z);
+		float z3=cal_determinant(Jmat[0].x,Jmat[0].y,Jmat[1].x,Jmat[1].y);
+		//转置
+		float temp=x2;
+		x2=y1;
+		y1=temp;
+		
+		temp=x3;
+		x3=z1;
+		z1=temp;
+
+		temp=y3;
+		y3=z2;
+		z2=temp;
+		//矩阵向量乘法
+		float result_x=x1*origin_normal.x+x2*origin_normal.y+x3*origin_normal.z;
+		float result_y=y1*origin_normal.x+y2*origin_normal.y+y3*origin_normal.z;
+		float result_z=z1*origin_normal.x+z2*origin_normal.y+z3*origin_normal.z;
+		return vec3(result_x,result_y,result_z);
+		
+		//return vec3(calBase_X_derivative(0,position_pragma.x),calBase_X_derivative(1,position_pragma.x),calBase_X_derivative(2,position_pragma.x));
+}
+
+Vertex calVertex_afterDeformation(CC cp){//参数为质心坐标
+   Vertex resultVertex=Vertex(origin_vertex[0].position*cp.u+origin_vertex[1].position*cp.v+origin_vertex[2].position*cp.w,
+                              origin_vertex[0].tex_cord*cp.u+origin_vertex[1].tex_cord*cp.v+origin_vertex[2].tex_cord*cp.w,
+							  origin_vertex[0].normal*cp.u+origin_vertex[1].normal*cp.v+origin_vertex[2].normal*cp.w);
+       
+	   resultVertex.normal=calNormal_afterDeformation(resultVertex.position,resultVertex.normal);
+	   /*
+   //开始b样条体求值
+        vec3 position_pragma=resultVertex.position;
+        vec3 position=vec3(0.0f,0.0f,0.0f);
+	    for(int i=0;i<controlPonitNums[0];i++){
+	        for(int j=0;j<controlPonitNums[1];j++){
+		      for(int k=0;k<controlPonitNums[2];k++){
+			      int index=i*controlPonitNums[1]*controlPonitNums[2]+j*controlPonitNums[2]+k;
+				  vec3 controlPonit=controlPoints.data[index];
+				  float tempx=calBase_X(i,position_pragma.x);
+				  float tempy=calBase_Y(j,position_pragma.y);
+				  float tempz=calBase_Z(k,position_pragma.z);
+				  float temptotal=tempx*tempy*tempz;
+			      position=position+controlPonit*temptotal;
+		                  }		
+					    }
+					  }
+		resultVertex.position=position;		
+		*/
+		return resultVertex;
+}
+void main()
+{
+        uint workGroupId=gl_WorkGroupID.x*gl_NumWorkGroups.y*gl_NumWorkGroups.z+gl_WorkGroupID.y*gl_NumWorkGroups.z+gl_WorkGroupID.z;		
+	    uint work_id=workGroupId*3;
+		if(work_id<vertex_nums){
+	    for(int i=0;i<3;i++)
+	     seg_nums[i]=controlPonitNums[i]-degree[i];
+        for(int i=0;i<3;i++){
+		origin_vertex[i]=vertexbuffer.data[indicesBuffer.data[work_id+i]];
+		}
+		
+
+	   int totalD=degree[0]+degree[1]+degree[2];
+	   const int fittingPointNums=(1+totalD)*(2+totalD)/2;
+	   //由于最大支持3*3*3次数的样条体，所以fitting_restraint_Points的空间申请最多为55+9	   
+
+	   //开始计算贝塞尔三角形的10个控制顶点
+	   //先计算重心坐标
+	   CC restraintPoints_Centroidcoordinates[9] = {
+		CC( 1,0,0 ),
+		CC( 2.0f/3 ,1.0f / 3,0 ),CC(2.0f / 3,0,1.0f / 3 ),
+		CC( 1.0f / 3 ,2.0f / 3,0 ),CC( 1.0f / 3,0,2.0f / 3 ),
+		CC( 0,1,0 ),CC( 0,2.0f / 3,1.0f / 3 ),CC( 0,1.0f / 3,2.0f / 3 ),CC( 0,0,1 )
+	   };
+
+	   CC fittingPoints_Centroidcoordinates[55];
+	    int index = 0;
+	    for (int i = 1; i <= totalD + 1; i++) {
+		float rest = 1.0f / totalD*(i-1);
+		CC beginPoint = CC(1 - rest, rest, 0);
+		fittingPoints_Centroidcoordinates[index]=beginPoint;
+		index++;
+		float space = (i==1?0: rest / (i - 1));
+		for (int k = 1; k < i; k++) {			
+			CC tempPoint = CC(1 - rest, rest-space*k, space*k);
+			fittingPoints_Centroidcoordinates[index]=tempPoint;
+			index++;
+		}		
+	   }//拟合点重心坐标计算完毕
+
+	   Vertex fitting_restraint_Points[64];
+	   for (int i = 0; i < fittingPointNums; i++){
+	     fitting_restraint_Points[i]=calVertex_afterDeformation(fittingPoints_Centroidcoordinates[i]);
+	   }
+	   for (int i = 0; i < 9; i++){
+	     fitting_restraint_Points[i+fittingPointNums]=calVertex_afterDeformation(restraintPoints_Centroidcoordinates[i]);
+	   }
+
+	   outputbuffer.data[work_id]=fitting_restraint_Points[fittingPointNums];
+	   outputbuffer.data[work_id+1]=fitting_restraint_Points[fittingPointNums+5];
+	   outputbuffer.data[work_id+2]=fitting_restraint_Points[fittingPointNums+8];
+	   //开始矩阵与向量组的乘法
+
+	   for (int i = 0; i < 10; i++){//一共算十行
+	     int base=i*(9+fittingPointNums);
+		 float temptotalX=0;
+		 float temptotalY=0;
+		 float temptotalZ=0;
+	     for(int j=0;j<9+fittingPointNums;j++){	        
+				temptotalX+=precomputeMat.data[base+j]*fitting_restraint_Points[j].position.x;
+				temptotalY+=precomputeMat.data[base+j]*fitting_restraint_Points[j].position.y;
+				temptotalZ+=precomputeMat.data[base+j]*fitting_restraint_Points[j].position.z;
+		  }
+		  outputTriangleControlPoints.data[workGroupId*10+i]=vec3(temptotalX,temptotalY,temptotalZ);
+	   }//矩阵与向量组的乘法完毕
+
+   
+	}//如果需要计算
+}//main结束

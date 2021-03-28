@@ -1,0 +1,11 @@
+﻿  SFFD.cpp
+r:\vs2015project\sffd\sffd\util\mesh.h(82): warning C4267: “参数”: 从“size_t”转换到“GLsizei”，可能丢失数据
+r:\vs2015project\sffd\sffd\util\model.h(178): warning C4267: “参数”: 从“size_t”转换到“unsigned int”，可能丢失数据
+r:\vs2015project\sffd\sffd\sffd.cpp(200): warning C4244: “=”: 从“double”转换到“GLfloat”，可能丢失数据
+r:\vs2015project\sffd\sffd\sffd.cpp(201): warning C4244: “=”: 从“double”转换到“GLfloat”，可能丢失数据
+r:\vs2015project\sffd\sffd\sffd.cpp(205): warning C4244: “初始化”: 从“double”转换到“GLfloat”，可能丢失数据
+r:\vs2015project\sffd\sffd\sffd.cpp(206): warning C4244: “初始化”: 从“double”转换到“GLfloat”，可能丢失数据
+r:\vs2015project\sffd\sffd\sffd.cpp(208): warning C4244: “=”: 从“double”转换到“GLfloat”，可能丢失数据
+r:\vs2015project\sffd\sffd\sffd.cpp(209): warning C4244: “=”: 从“double”转换到“GLfloat”，可能丢失数据
+r:\vs2015project\sffd\sffd\sffd.cpp(216): warning C4244: “参数”: 从“double”转换到“GLfloat”，可能丢失数据
+LINK : fatal error LNK1104: 无法打开文件“glfw3.lib”
