@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:id="@+id/rootView"
+    tools:context=".MainActivity">
+
+    <com.gc.app.MyGLSurfaceView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="10"
+        android:id="@+id/my_gl_surface_view"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:background="#FFFFFF"
+        android:orientation="horizontal"
+        android:layout_weight="1">
+
+
+        <Switch
+            android:id="@+id/deformation_view_switch"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:checked="false"
+            android:showText="true"
+            android:textOff="视图"
+            android:textOn="变形"
+            android:textSize="8sp"
+            android:thumb="@drawable/thumb"/>
+
+        <Switch
+            android:id="@+id/showBoundbox_switch"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:checked="false"
+            android:showText="true"
+            android:textOff="box"
+            android:textOn="box"
+            android:textSize="8sp"
+            android:thumb="@drawable/thumb"/>
+
+        <Button
+            android:id="@+id/deformationReset_button"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1.5"
+            android:text="生成"
+            android:textSize="28sp" />
+
+        <Switch
+            android:id="@+id/displayMode_switch"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:checked="false"
+            android:showText="true"
+            android:textOff="填充"
+            android:textOn="线框"
+            android:textSize="8sp"
+            android:thumb="@drawable/thumb" />
+
+        <Switch
+            android:id="@+id/manipulationMode_switch"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:checked="false"
+            android:showText="true"
+            android:textOff="旋转"
+            android:textOn="平移"
+            android:textSize="8sp"
+            android:thumb="@drawable/thumb" />
+    </LinearLayout>
+</LinearLayout>

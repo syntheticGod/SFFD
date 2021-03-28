@@ -1,0 +1,167 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="源文件">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="头文件">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="资源文件">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="ReadMe.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="targetver.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="util\camera.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="util\mesh.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="util\model.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="util\shader.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="util\texture.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="mode.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="boundbox.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="bspinebody.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="coordianteTransform.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="BsplineBase.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="globalGPUTest.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="cutScheme.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ssbo.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="testCYM.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="teapotData.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="teapotUtil.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="mouse.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="SFFD.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="boundbox.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="bspinebody.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="globalGPUTest.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="cutScheme.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="ssbo.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="testCYM.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="teapotUtil.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="shader\model.frag">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\model.vertex">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\boundbox.frag">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\boundbox.vertex">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\modelBspline.frag">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\modelBspline.vertex">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\triangleTest.frag">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\triangleTest.geo">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\bsplineModel.comp">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\tessellation.comp">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\centroid_coordinates_interpolation.comp">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\bsplineBase.comp">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\deformation.comp">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\bezierTriangleControlPoints.comp">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\selectedPoint.frag">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\selectedPoint.vertex">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\model_old.frag">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\model_noTex.frag">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\error.frag">
+      <Filter>资源文件</Filter>
+    </None>
+    <None Include="shader\error.vertex">
+      <Filter>资源文件</Filter>
+    </None>
+  </ItemGroup>
+</Project>
